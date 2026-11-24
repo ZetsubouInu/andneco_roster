@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>キャスト名簿</title>
+    <meta name="robots" content="noindex, nofollow">
+    <style>
+        /* 検索バー対策など全体設定 */
+        html { height: -webkit-fill-available; }
+        body { font-family: 'Helvetica Neue', Arial, sans-serif; background-color: #f0f2f5; margin: 0; padding: 0; color: #333; box-sizing: border-box; height: 100vh; height: 100dvh; min-height: -webkit-fill-available; overflow: hidden; display: flex; }
+        .sidebar { width: 250px; background: #2c3e50; color: white; display: flex; flex-direction: column; transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); z-index: 1000; }
+        .sidebar-header { padding: 20px; background: #1a252f; display: flex; justify-content: space-between; align-items: center; }
+        .sidebar-header h2 { margin: 0; font-size: 18px; }
+        .btn-add { background: #28a745; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        .cast-list { list-style: none; padding: 0; margin: 0; overflow-y: auto; flex: 1; }
+        .cast-item { padding: 15px 20px; border-bottom: 1px solid #34495e; cursor: pointer; transition: background 0.2s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;}
+        .cast-item:hover, .cast-item.active { background: #34495e; border-left: 4px solid #007BFF; padding-left: 16px; }
+        .sidebar-footer { padding: 12px; background: #1a252f; display: flex; gap: 8px; }
+        .btn-backup { flex: 1; background: #34495e; color: white; border: none; padding: 8px 4px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold; }
+        @media screen and (max-width: 768px) { .sidebar { position: fixed; top: 0; left: 0; height: 100%; transform: translateX(-100%); } .sidebar.open { transform: translateX(0); box-shadow: 2px 0 10px rgba(0,0,0,0.3); } }
+        .menu-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 999; display: none; opacity: 0; transition: opacity 0.3s; }
+        .menu-overlay.show { display: block; opacity: 1; }
+        .main-content { flex: 1; position: relative; background: #f0f2f5; display: flex; flex-direction: column; overflow: hidden; }
+        .top-bar { background: white; height: 60px; padding: 0 15px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 2px 5px rgba(0,0,0,0.05); z-index: 10; }
+        .hamburger { font-size: 24px; background: none; border: none; cursor: pointer; color: #333; padding: 5px; }
+        .top-bar-title { font-weight: bold; font-size: 18px; }
+        .top-bar-spacer { width: 34px; }
+        .swipe-viewport { flex: 1; position: relative; overflow: hidden; display: flex; align-items: center; touch-action: pan-y; width: 100%; }
+        .swipe-track { display: flex; align-items: center; height: 100%; will-change: transform; }
+        .card-wrapper { width: var(--vp-width, 100vw); height: 100%; display: flex; justify-content: center; align-items: center; flex-shrink: 0; }
+        .cast-card { width: 90%; max-width: 500px; height: 85%; max-height: 800px; background: white; border-radius: 12px; box-shadow: 0 8px 20px rgba(0,0,0,0.1); padding: 20px; box-sizing: border-box; display: flex; flex-direction: column; overflow-y: auto; touch-action: pan-y; }
+        .empty-state { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; color: #888; font-weight: bold; width: 100%; z-index: 5;}
+        .card-header { display: flex; justify-content: space-between; border-bottom: 2px solid #eee; padding-bottom: 15px; margin-bottom: 15px; }
+        .left-col { flex: 1; }
+        .right-col { width: 110px; margin-left: 15px; display: flex; flex-direction: column; justify-content: space-between; padding-bottom: 4px; }
+        .label { font-size: 12px; color: #777; margin-bottom: 4px; }
+        .input-name { font-size: 24px; font-weight: bold; border: none; border-bottom: 1px dashed #ccc; width: 100%; outline: none; background: transparent; padding: 2px 0; }
+        .input-date { font-size: 14px; border: none; border-bottom: 1px dashed #ccc; width: 100%; outline: none; background: transparent; padding: 4px 0; }
+        .input-line { font-size: 14px; border: none; border-bottom: 1px dashed #ccc; width: 100%; outline: none; background: transparent; padding: 4px 0; }
+        .single-line-group { display: flex; gap: 15px; margin-top: 10px; }
+        .single-line-group > div { flex: 1; }
+        .memo-section { flex: 1; display: flex; flex-direction: column; margin-top: 15px; }
+        .input-memo { flex: 1; width: 100%; min-height: 100px; border: 1px solid #eee; border-radius: 6px; padding: 10px; box-sizing: border-box; resize: none; font-size: 14px; line-height: 1.6; outline: none; background: #fafafa; }
+        .input-memo:focus { border-color: #007BFF; background: white; }
+        .card-footer { display: flex; justify-content: space-between; margin-top: 15px; align-items: center;}
+        .btn-delete { background: #dc3545; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer; font-size: 13px; z-index: 10; position: relative;}
+        .save-status { color: #28a745; font-size: 13px; opacity: 0; transition: opacity 0.3s; }
+        .save-status.show { opacity: 1; }
+        .check-advice { font-size: 13px; font-weight: bold; color: #d32f2f; display: flex; align-items: center; gap: 4px; cursor: pointer; z-index: 10; position: relative; }
+        .check-advice input[type="checkbox"] { transform: scale(1.2); cursor: pointer; }
+    </style>
+</head>
+<body>
+
+<div class="main-content" id="mainContent">
+    <div class="top-bar">
+        <button class="hamburger" onclick="toggleMenu()">☰</button>
+        <div class="top-bar-title">名簿</div>
+        <div class="top-bar-spacer"></div>
+    </div>
+    <div class="swipe-viewport" id="swipeViewport">
+        <div class="swipe-track" id="swipeTrack"></div>
+        <div class="empty-state" id="emptyState" style="display: none;">左上の「☰」から<br>キャストを追加してください</div>
+    </div>
+</div>
+
+<div class="menu-overlay" id="menuOverlay" onclick="toggleMenu()"></div>
+
+<div class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+        <h2>👥 キャスト一覧</h2>
+        <button class="btn-add" onclick="createNewCast()">＋ 追加</button>
+    </div>
+    <ul class="cast-list" id="castList"></ul>
+    <div class="sidebar-footer">
+        <button class="btn-backup" onclick="exportBackup()">💾 バックアップ</button>
+        <button class="btn-backup" onclick="document.getElementById('importFile').click()">📂 復元</button>
+        <input type="file" id="importFile" accept=".json,application/json" style="display:none;">
+    </div>
+</div>
+
+<template id="cardTemplate">
+    <div class="cast-card">
+        <div class="card-header">
+            <div class="left-col">
+                <div class="label">源氏名</div>
+                <div style="display: flex; align-items: flex-end;">
+                    <input type="text" class="input-name cast-name" placeholder="源氏名を入力">
+                    <span class="cast-mark" style="font-size: 20px; margin-left: 5px; margin-bottom: 2px;"></span>
+                </div>
+                <div class="single-line-group">
+                    <div><div class="label">誕生日(月日)</div><input type="text" class="input-line cast-birthday" placeholder="例: 12/25"></div>
+                    <div><div class="label">顔出し</div><input type="text" class="input-line cast-face" placeholder="例: 目元のみ"></div>
+                </div>
+            </div>
+            <div class="right-col">
+                <div><div class="label">入社日</div><input type="date" class="input-date cast-join-date"></div>
+                <label class="check-advice"><input type="checkbox" class="cast-advice-check">伝達あり💭</label>
+            </div>
+        </div>
+        <div><div class="label">アルコール</div><input type="text" class="input-line cast-alcohol" placeholder="アルコールに関するメモ（例: テキーラNG）"></div>
+        <div class="memo-section"><div class="label">メモ</div><textarea class="input-memo cast-memo" placeholder="特徴や注意事項など..."></textarea></div>
+        <div class="card-footer"><button class="btn-delete">🗑️ この名簿を削除</button><div class="save-status">保存しました ✓</div></div>
+    </div>
+</template>
+
+<script>
+    // ===== ブラウザ内保存（localStorage） =====
+    const STORAGE_KEY = 'castRoster_v1';
+
+    function loadFromStorage() {
+        try {
+            const raw = localStorage.getItem(STORAGE_KEY);
+            if (!raw) return [];
+            const data = JSON.parse(raw);
+            return Array.isArray(data.roster) ? data.roster : [];
+        } catch (e) {
+            console.error(e);
+            return [];
+        }
+    }
+
+    function saveToStorage() {
+        try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify({ roster: roster, savedAt: new Date().toISOString() }));
+        } catch (e) {
+            console.error(e);
+            alert('保存に失敗しました。プライベートブラウズ中や容量不足の可能性があります。');
+        }
+    }
+
+    // ブラウザによる自動削除をされにくくする（対応ブラウザのみ）
+    try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
+
+    let roster = [];
+    let saveTimeout = null;
+    let isEditingText = false;
+    let pendingRender = false;
+
+    const castList = document.getElementById('castList');
+    const emptyState = document.getElementById('emptyState');
+    const sidebar = document.getElementById('sidebar');
+    const menuOverlay = document.getElementById('menuOverlay');
+    const swipeTrack = document.getElementById('swipeTrack');
+    const cardTemplate = document.getElementById('cardTemplate');
+    const swipeViewport = document.getElementById('swipeViewport');
+
+    let currentIndex = 0; let currentX = 0; let isDragging = false; let startX = 0; let startY = 0; let initialTranslateX = 0; let cardWidth = 0;
+    let touchTarget = null; let touchStartTime = 0; let isSwiping = false;
+
+    function getBeginnerMark(joinDateStr) {
+        if (!joinDateStr) return '';
+        const jDate = new Date(joinDateStr); if (isNaN(jDate.getTime())) return '';
+        const now = new Date(); jDate.setHours(0,0,0,0); now.setHours(0,0,0,0);
+        const diffDays = (now - jDate) / (1000 * 60 * 60 * 24);
+        if (diffDays >= -30 && diffDays <= 31) return '🔰';
+        return '';
+    }
+
+    function sortRoster() {
+        if (roster.length === 0) return;
+        let currentId = roster[currentIndex] ? roster[currentIndex].id : null;
+        roster.forEach((cast, idx) => cast._origIdx = idx);
+        roster.sort((a, b) => {
+            const aAdv = a.hasAdvice ? 1 : 0; const bAdv = b.hasAdvice ? 1 : 0;
+            if (bAdv !== aAdv) return bAdv - aAdv; return a._origIdx - b._origIdx;
+        });
+        roster.forEach(cast => delete cast._origIdx);
+        if (currentId) {
+            currentIndex = roster.findIndex(c => c.id === currentId);
+            if(currentIndex === -1) currentIndex = 0;
+        }
+    }
+
+    function refreshAll() {
+        if (roster.length === 0) {
+            swipeTrack.innerHTML = ''; emptyState.style.display = 'block'; currentIndex = 0;
+        } else {
+            emptyState.style.display = 'none';
+            if (currentIndex >= roster.length) currentIndex = 0;
+            renderCards();
+        }
+        renderList();
+    }
+
+    function initApp() {
+        roster = loadFromStorage();
+        currentIndex = 0;
+        sortRoster();
+        refreshAll();
+    }
+
+    window.toggleMenu = function() { sidebar.classList.toggle('open'); if(sidebar.classList.contains('open')) menuOverlay.classList.add('show'); else menuOverlay.classList.remove('show'); }
+
+    // ===== バックアップ / 復元 =====
+    window.exportBackup = function() {
+        const json = JSON.stringify({ roster: roster, exportedAt: new Date().toISOString() }, null, 2);
+        const blob = new Blob([json], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const d = new Date();
+        const pad = n => String(n).padStart(2, '0');
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `cast_roster_${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}.json`;
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+    };
+
+    document.getElementById('importFile').addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        e.target.value = '';
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+            try {
+                const data = JSON.parse(reader.result);
+                const imported = Array.isArray(data) ? data : data.roster;
+                if (!Array.isArray(imported)) throw new Error('形式が違います');
+                if (!confirm(`${imported.length}件のデータで今の名簿を上書きします。よろしいですか？`)) return;
+                roster = imported;
+                currentIndex = 0;
+                sortRoster(); saveToStorage(); refreshAll();
+                alert('復元しました');
+            } catch (err) {
+                alert('読み込みに失敗しました。バックアップファイルを確認してください。');
+            }
+        };
+        reader.readAsText(file);
+    });
+
+    function renderList() {
+        castList.innerHTML = '';
+        roster.forEach((cast, index) => {
+            const li = document.createElement('li'); li.className = `cast-item ${index === currentIndex ? 'active' : ''}`;
+            const nameText = cast.name || '（名前未入力）'; const markText = getBeginnerMark(cast.joinDate); const adviceIcon = cast.hasAdvice ? ' 💭' : '';
+            li.textContent = nameText + ' ' + markText + adviceIcon;
+            li.onclick = () => { if(index === currentIndex) { toggleMenu(); return; } currentIndex = index; renderList(); snapToCurrentIndex(); if(window.innerWidth <= 768) toggleMenu(); };
+            castList.appendChild(li);
+        });
+    }
+
+    window.createNewCast = function() {
+        const newCast = { id: Date.now(), name: '', birthday: '', face: '', joinDate: '', alcohol: '', memo: '', hasAdvice: false };
+        roster.push(newCast); emptyState.style.display = 'none';
+        sortRoster(); saveToStorage();
+        currentIndex = roster.findIndex(c => c.id === newCast.id); renderCards(); renderList();
+        if(window.innerWidth <= 768 && sidebar.classList.contains('open')) toggleMenu();
+        setTimeout(() => { const wrappers = swipeTrack.querySelectorAll('.card-wrapper'); let domIndex = (roster.length > 1) ? currentIndex + 1 : currentIndex; if (wrappers[domIndex]) { const nameInput = wrappers[domIndex].querySelector('.cast-name'); if(nameInput) { nameInput.focus(); isEditingText = true; } } }, 100);
+    }
+
+    function createCardElement(cast, realIndex) {
+        const clone = cardTemplate.content.cloneNode(true); const card = clone.querySelector('.cast-card');
+        const elName = card.querySelector('.cast-name'); const elBirthday = card.querySelector('.cast-birthday'); const elFace = card.querySelector('.cast-face'); const elJoinDate = card.querySelector('.cast-join-date'); const elAlcohol = card.querySelector('.cast-alcohol'); const elMemo = card.querySelector('.cast-memo'); const elAdviceCheck = card.querySelector('.cast-advice-check'); const elMark = card.querySelector('.cast-mark'); const elDeleteBtn = card.querySelector('.btn-delete'); const elSaveStatus = card.querySelector('.save-status');
+        elName.value = cast.name || ''; elBirthday.value = cast.birthday || ''; elFace.value = cast.face || ''; elJoinDate.value = cast.joinDate || ''; elAlcohol.value = cast.alcohol || ''; elMemo.value = cast.memo || ''; elAdviceCheck.checked = !!cast.hasAdvice; elMark.textContent = getBeginnerMark(cast.joinDate);
+
+        const inputs = [elName, elBirthday, elFace, elJoinDate, elAlcohol, elMemo];
+        inputs.forEach(input => {
+            input.addEventListener('focus', () => { isEditingText = true; });
+            input.addEventListener('blur', () => { isEditingText = false; if (pendingRender) { renderCards(); pendingRender = false; } });
+            input.addEventListener('touchstart', (e) => { e.preventDefault(); }, {passive: false});
+        });
+
+        const handleChange = () => {
+            roster[realIndex].name = elName.value; roster[realIndex].birthday = elBirthday.value; roster[realIndex].face = elFace.value; roster[realIndex].joinDate = elJoinDate.value; roster[realIndex].alcohol = elAlcohol.value; roster[realIndex].memo = elMemo.value; roster[realIndex].hasAdvice = elAdviceCheck.checked;
+            elMark.textContent = getBeginnerMark(elJoinDate.value);
+            saveToStorage(); // 入力のたびに即保存（データ消失防止）
+            elSaveStatus.classList.add('show'); clearTimeout(saveTimeout);
+            saveTimeout = setTimeout(() => {
+                elSaveStatus.classList.remove('show');
+                const beforeIdx = currentIndex;
+                sortRoster(); saveToStorage(); renderList();
+                // 「伝達あり」で並び順が変わった場合はカードを描き直す
+                if (currentIndex !== beforeIdx) { if (isEditingText) pendingRender = true; else renderCards(); }
+            }, 1000);
+            renderList();
+        };
+
+        inputs.forEach(input => input.addEventListener('input', handleChange)); elAdviceCheck.addEventListener('change', handleChange);
+        elDeleteBtn.addEventListener('click', () => { if(!confirm("この名簿を削除しますか？")) return; roster.splice(realIndex, 1); sortRoster(); saveToStorage(); if(currentIndex >= roster.length) currentIndex = Math.max(0, roster.length - 1); if (roster.length === 0) { swipeTrack.innerHTML = ''; emptyState.style.display = 'block'; renderList(); } else { renderCards(); renderList(); } });
+        const wrapper = document.createElement('div'); wrapper.className = 'card-wrapper'; wrapper.appendChild(card); return wrapper;
+    }
+
+    function renderCards() {
+        if(roster.length === 0) return;
+        swipeTrack.style.transition = 'none'; swipeTrack.innerHTML = '';
+        if (roster.length === 1) { swipeTrack.appendChild(createCardElement(roster[0], 0)); } else {
+            const lastCast = roster[roster.length - 1]; const firstCast = roster[0];
+            const dummyStart = createCardElement(lastCast, roster.length - 1); dummyStart.classList.add('dummy-card'); swipeTrack.appendChild(dummyStart);
+            roster.forEach((cast, idx) => { swipeTrack.appendChild(createCardElement(cast, idx)); });
+            const dummyEnd = createCardElement(firstCast, 0); dummyEnd.classList.add('dummy-card'); swipeTrack.appendChild(dummyEnd);
+        }
+        setTimeout(() => { updateCardWidth(); snapToCurrentIndex(false); }, 10);
+    }
+
+    function updateCardWidth() { const viewportWidth = swipeViewport.clientWidth || window.innerWidth; cardWidth = viewportWidth; document.documentElement.style.setProperty('--vp-width', cardWidth + 'px'); }
+
+    function snapToCurrentIndex(animate = true) {
+        if(roster.length === 0) return;
+        let domIndex = (roster.length > 1) ? currentIndex + 1 : currentIndex; currentX = -(domIndex * cardWidth);
+        swipeTrack.style.transition = animate ? 'transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)' : 'none'; swipeTrack.style.transform = `translateX(${currentX}px)`;
+        document.querySelectorAll('.cast-item').forEach((li, idx) => { if(idx === currentIndex) li.classList.add('active'); else li.classList.remove('active'); });
+    }
+
+    swipeViewport.addEventListener('touchstart', dragStart, { passive: false }); swipeViewport.addEventListener('touchmove', dragMove, { passive: false }); swipeViewport.addEventListener('touchend', dragEnd);
+    swipeViewport.addEventListener('mousedown', dragStart); window.addEventListener('mousemove', dragMove); window.addEventListener('mouseup', dragEnd);
+
+    function dragStart(e) {
+        if (e.target.tagName === 'BUTTON' || e.target.type === 'checkbox') return;
+        isDragging = true; isSwiping = false; touchTarget = e.target; touchStartTime = Date.now();
+        startX = e.type.includes('mouse') ? e.clientX : e.touches[0].clientX; startY = e.type.includes('mouse') ? e.clientY : e.touches[0].clientY;
+        if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA')) { if (document.activeElement !== touchTarget) { document.activeElement.blur(); } }
+        updateCardWidth(); let domIndex = (roster.length > 1) ? currentIndex + 1 : currentIndex; initialTranslateX = -(domIndex * cardWidth);
+        swipeTrack.style.transition = 'none';
+    }
+
+    function dragMove(e) {
+        if (!isDragging) return;
+        const currentMouseX = e.type.includes('mouse') ? e.clientX : e.touches[0].clientX; const currentMouseY = e.type.includes('mouse') ? e.clientY : e.touches[0].clientY;
+        const diffX = currentMouseX - startX; const diffY = currentMouseY - startY;
+        if (Math.abs(diffX) > 10 || Math.abs(diffY) > 10) isSwiping = true;
+        if (Math.abs(diffX) > Math.abs(diffY)) { e.preventDefault(); if (roster.length > 1) { currentX = initialTranslateX + diffX; swipeTrack.style.transform = `translateX(${currentX}px)`; } }
+    }
+
+    function dragEnd(e) {
+        if (!isDragging) return;
+        isDragging = false;
+        const endX = e.type.includes('mouse') ? e.clientX : e.changedTouches[0].clientX; const diffX = endX - startX; const touchDuration = Date.now() - touchStartTime;
+
+        if (!isSwiping && touchDuration < 300) {
+            if (touchTarget && (touchTarget.tagName === 'INPUT' || touchTarget.tagName === 'TEXTAREA')) {
+                touchTarget.focus();
+                if(!e.type.includes('mouse') && touchTarget.type !== 'date') { const len = touchTarget.value.length; if(touchTarget.setSelectionRange) touchTarget.setSelectionRange(len, len); }
+            }
+            snapToCurrentIndex(); return;
+        }
+
+        if (roster.length <= 1 && startX >= 30) { snapToCurrentIndex(); return; }
+        const threshold = cardWidth * 0.10;
+        if (startX < 30 && diffX > 0) { if(!sidebar.classList.contains('open')) toggleMenu(); snapToCurrentIndex(); return; }
+
+        if (diffX < -threshold) currentIndex++; else if (diffX > threshold) currentIndex--;
+        swipeTrack.style.transition = 'transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)'; let domIndex = (roster.length > 1) ? currentIndex + 1 : currentIndex; swipeTrack.style.transform = `translateX(${-(domIndex * cardWidth)}px)`;
+
+        setTimeout(() => {
+            let didWrap = false;
+            if (currentIndex >= roster.length) { currentIndex = 0; didWrap = true; } else if (currentIndex < 0) { currentIndex = roster.length - 1; didWrap = true; }
+            if (didWrap) snapToCurrentIndex(false); else { document.querySelectorAll('.cast-item').forEach((li, idx) => { if(idx === currentIndex) li.classList.add('active'); else li.classList.remove('active'); }); }
+        }, 300);
+    }
+
+    window.addEventListener('resize', () => { if(roster.length > 0) { updateCardWidth(); snapToCurrentIndex(false); } });
+    // アプリを閉じる・切り替える直前にも念のため保存
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') saveToStorage(); });
+    window.addEventListener('pagehide', saveToStorage);
+
+    initApp();
+</script>
+
+</body>
+</html>

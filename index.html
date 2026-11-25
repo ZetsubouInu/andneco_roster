@@ -137,6 +137,7 @@
     let saveTimeout = null;
     let isEditingText = false;
     let pendingRender = false;
+    let suppressBlurRender = false;
 
     const castList = document.getElementById('castList');
     const emptyState = document.getElementById('emptyState');
@@ -257,7 +258,7 @@
         const inputs = [elName, elBirthday, elFace, elJoinDate, elAlcohol, elMemo];
         inputs.forEach(input => {
             input.addEventListener('focus', () => { isEditingText = true; });
-            input.addEventListener('blur', () => { isEditingText = false; if (pendingRender) { renderCards(); pendingRender = false; } });
+            input.addEventListener('blur', () => { isEditingText = false; if (!suppressBlurRender && pendingRender) { renderCards(); pendingRender = false; } });
             input.addEventListener('touchstart', (e) => { e.preventDefault(); }, {passive: false});
         });
 
@@ -328,9 +329,23 @@
         const endX = e.type.includes('mouse') ? e.clientX : e.changedTouches[0].clientX; const diffX = endX - startX; const touchDuration = Date.now() - touchStartTime;
 
         if (!isSwiping && touchDuration < 300) {
-            if (touchTarget && (touchTarget.tagName === 'INPUT' || touchTarget.tagName === 'TEXTAREA')) {
-                touchTarget.focus();
-                if(!e.type.includes('mouse') && touchTarget.type !== 'date') { const len = touchTarget.value.length; if(touchTarget.setSelectionRange) touchTarget.setSelectionRange(len, len); }
+            if (touchTarget && touchTarget.isConnected && (touchTarget.tagName === 'INPUT' || touchTarget.tagName === 'TEXTAREA')) {
+                if (touchTarget.type === 'date') {
+                    // 入社日：タップでカレンダーを開く
+                    touchTarget.focus();
+                    try {
+                        if (typeof touchTarget.showPicker === 'function') touchTarget.showPicker();
+                        else touchTarget.click();
+                    } catch (err) { touchTarget.click(); }
+                } else {
+                    // 戻るボタンでキーボードだけ閉じた状態（フォーカスは残ったまま）でも
+                    // 再タップでキーボードが開くよう、一度フォーカスを外してから付け直す
+                    if (document.activeElement === touchTarget) {
+                        suppressBlurRender = true; touchTarget.blur(); suppressBlurRender = false;
+                    }
+                    touchTarget.focus();
+                    if (!e.type.includes('mouse')) { const len = touchTarget.value.length; if (touchTarget.setSelectionRange) touchTarget.setSelectionRange(len, len); }
+                }
             }
             snapToCurrentIndex(); return;
         }
